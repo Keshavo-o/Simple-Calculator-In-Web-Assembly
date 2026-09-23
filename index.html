@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>WASM Calculator</title>
+</head>
+
+<body>
+
+<!-- simple calc -->
+
+    <header class="page-header">
+        <span class="eyebrow">WebAssembly Demonstration</span>
+        <h1>WASM Calculator</h1>
+        <p>A small experiment comparing WebAssembly and JavaScript for numerical computation.</p>
+    </header>
+
+    <main>
+
+        <section class="lab-section" aria-labelledby="calculator-title">
+            <div class="section-heading">
+                <span class="section-kicker">01 / Calculator</span>
+                <h2 id="calculator-title">Basic arithmetic</h2>
+                <p>Enter two values and choose an operation.</p>
+            </div>
+
+            <div class="input-row">
+                <div class="field">
+                    <label for="a">First number</label>
+                    <input id="a" type="number" step="any" inputmode="decimal">
+                </div>
+
+                <div class="field">
+                    <label for="b">Second number</label>
+                    <input id="b" type="number" step="any" inputmode="decimal">
+                </div>
+            </div>
+
+            <div class="operation-label">Operation</div>
+
+            <div class="operations">
+                <button type="button" onclick="calculate('add')" aria-label="Add">+</button>
+                <button type="button" onclick="calculate('subtract')" aria-label="Subtract">−</button>
+                <button type="button" onclick="calculate('multiply')" aria-label="Multiply">×</button>
+                <button type="button" onclick="calculate('divide')" aria-label="Divide">÷</button>
+            </div>
+
+            <div class="result-box">
+                <span class="result-label">Calculation result</span>
+                <h2 id="result">Result: —</h2>
+            </div>
+        </section>
+
+        <section class="lab-section" aria-labelledby="benchmark-title">
+            <div class="section-heading">
+                <span class="section-kicker">02 / Benchmark</span>
+                <h2 id="benchmark-title">JavaScript vs WebAssembly</h2>
+                <p>Compare the execution time of the same repeated operation.</p>
+            </div>
+
+            <div class="benchmark-copy">
+                <p>Test: 1,000,000 additions, where each iteration performs <strong>1 + i</strong>.</p>
+                <span class="benchmark-code">i = 1 → 1,000,000</span>
+            </div>
+
+            <button class="benchmark-button" type="button" onclick="runBenchmark()">
+                Run benchmark
+            </button>
+
+            <div class="benchmark-results">
+                <div class="metric">
+                    <span class="metric-label">JavaScript</span>
+                    <div class="metric-value" id="benchmark-js">Waiting for test…</div>
+                </div>
+
+                <div class="metric">
+                    <span class="metric-label">WebAssembly</span>
+                    <div class="metric-value" id="benchmark-wasm">Waiting for test…</div>
+                </div>
+
+                <div class="metric benchmark-summary">
+                    <span class="metric-label">Comparison</span>
+                    <div class="metric-value" id="benchmark-result">Result: —</div>
+                </div>
+            </div>
+        </section>
+
+        <aside class="note">
+            <strong>Why repeat the operation?</strong>
+            <p>
+                A single addition is too small to produce a useful timing comparison because
+                browser timing overhead can be larger than the computation itself. Repeating
+                the operation many times makes the measured difference easier to observe.
+            </p>
+        </aside>
+
+        <aside class="note">
+            <strong>Where WebAssembly becomes more interesting</strong>
+            <p>
+                WebAssembly is designed for workloads where a large amount of computation is
+                performed repeatedly. Examples include image processing, audio/video work,
+                simulations, cryptography, and other performance-sensitive tasks.
+            </p>
+        </aside>
+
+    </main>
+
+<script>
+
+    let wasm;
+
+
+//loading wasm
+
+    async function loadWasm()
+    {
+        const response = await fetch("calculator.wasm");
+
+        const bytes = await response.arrayBuffer();
+
+        const result = await WebAssembly.instantiate(bytes);
+
+        wasm = result.instance.exports;
+    }
+
+
+//simple calculator
+
+    async function calculate(operation)
+    {
+        const a = Number(document.getElementById("a").value);
+        const b = Number(document.getElementById("b").value);
+
+        if (!wasm)
+        {
+            await loadWasm();
+        }
+
+        let answer;
+
+        if (operation === "add")
+        {
+            answer = wasm.add(a, b);
+        }
+        else if (operation === "subtract")
+        {
+            answer = wasm.subtract(a, b);
+        }
+        else if (operation === "multiply")
+        {
+            answer = wasm.multiply(a, b);
+        }
+        else if (operation === "divide")
+        {
+            if (b === 0)
+            {
+                document.getElementById("result").innerText =
+                    "Result: Cannot divide by zero";
+                return;
+            }
+
+            answer = wasm.divide(a, b);
+        }
+
+        document.getElementById("result").innerText =
+            "Result: " + answer;
+    }
+
+
+//performance benchmark
+
+    async function runBenchmark()
+    {
+        if (!wasm)
+        {
+            await loadWasm();
+        }
+
+        const a = 10;
+        const b = 20;
+
+        const iterations = 1000000;
+
+
+//javascript
+
+        let jsResult = 0;
+
+        const jsStart = performance.now();
+
+        for (let i = 0; i < iterations; i++)
+        {
+            jsResult += a + b;
+        }
+
+        const jsEnd = performance.now();
+
+        const jsTime = jsEnd - jsStart;
+
+
+//webassembly
+
+        const wasmStart = performance.now();
+
+        const wasmResult = wasm.addMany(a, b);
+
+        const wasmEnd = performance.now();
+
+        const wasmTime = wasmEnd - wasmStart;
+
+        //displaying
+
+        document.getElementById("benchmark-js").innerText =
+            "JavaScript: " + jsTime.toFixed(6) + " ms";
+
+        document.getElementById("benchmark-wasm").innerText =
+            "WebAssembly: " + wasmTime.toFixed(6) + " ms";
+
+        document.getElementById("benchmark-result").innerText =
+            "Results → JS: " + jsResult +
+            " | WASM: " + wasmResult;
+    }
+
+
+    // Load WASM when page starts
+    loadWasm();
+
+</script>
+
+</body>
+</html>
